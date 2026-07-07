@@ -80,6 +80,28 @@ test("exportFileList includes pages and photos per meta", () => {
   assert.ok(multi.includes("photo-1.jpg"));
 });
 
+test("gallery renders uploaded photos", () => {
+  const html = renderPages(spec, { photos: ["photo-1.jpg", "photo-2.png"] })["index.html"];
+  assert.ok(html.includes('src="photo-1.jpg"'));
+  assert.ok(html.includes('src="photo-2.png"'));
+  assert.ok(html.includes("gallery-grid"));
+  assert.ok(!renderPages(spec)["index.html"].includes('id="gallery"'));
+});
+
+test("formspreeId switches the contact form to a POST form", () => {
+  const html = renderPages(spec, { formspreeId: "mzbqwxyz" })["index.html"];
+  assert.ok(html.includes('action="https://formspree.io/f/mzbqwxyz"'));
+  assert.ok(!html.includes("mailto:"));
+  const plain = renderPages(spec)["index.html"];
+  assert.ok(plain.includes("mailto:"));
+  assert.ok(!plain.includes("formspree.io"));
+});
+
+test("custom hue renders into the page palette", () => {
+  const html = renderPages(spec, { theme: "custom", hue: 200 })["index.html"];
+  assert.ok(html.includes("--primary: 200 50% 33%"));
+});
+
 test("schema marks industry sections optional", () => {
   for (const key of ["menu", "team", "serviceArea", "bookingUrl"]) {
     assert.ok(SITE_SPEC_SCHEMA.properties[key], `schema missing ${key}`);

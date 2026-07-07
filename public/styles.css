@@ -75,6 +75,38 @@ header.site {
 .check-row { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
 .check-row input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: hsl(var(--primary)); }
 
+.hue-row { display: flex; align-items: center; gap: 0.75rem; }
+.hue-row input[type="range"] {
+  flex: 1;
+  max-width: 16rem;
+  accent-color: hsl(var(--primary));
+  background: linear-gradient(to right,
+    hsl(0 50% 45%), hsl(60 50% 45%), hsl(120 50% 45%),
+    hsl(180 50% 45%), hsl(240 50% 45%), hsl(300 50% 45%), hsl(360 50% 45%));
+  height: 0.5rem;
+  border-radius: 9999px;
+  appearance: none;
+}
+.hue-row input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.1rem; height: 1.1rem;
+  border-radius: 50%;
+  background: hsl(var(--card));
+  border: 2px solid hsl(var(--primary));
+  cursor: pointer;
+}
+.hue-row .swatch { width: 1.4rem; height: 1.4rem; border-radius: 50%; border: 1px solid hsl(var(--border)); }
+
+#formspree-id {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--input));
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  max-width: 16rem;
+}
+
 textarea, input[type="file"] {
   background: hsl(var(--background));
   border: 1px solid hsl(var(--input));

@@ -36,8 +36,16 @@
       <label for="logo">Logo <span class="hint">(optional — png, jpg, svg, webp)</span></label>
       <input type="file" id="logo" name="logo" accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp">
 
+      <label for="photos">Photos <span class="hint">(optional — up to 4, shown in a gallery)</span></label>
+      <input type="file" id="photos" name="photos" multiple accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp">
+
       <label>Theme</label>
       <div id="theme-picker" class="theme-picker"></div>
+      <div id="hue-row" class="hue-row" hidden>
+        <input type="range" id="hue" min="0" max="359" value="25">
+        <span class="swatch" id="hue-swatch"></span>
+        <span class="hint">Pick a base color for your custom theme</span>
+      </div>
 
       <label class="check-row">
         <input type="checkbox" id="multi-page" name="multiPage" value="true">
@@ -81,6 +89,9 @@
         <input type="text" id="regen-instructions" placeholder="Optional instructions, e.g. 'make it warmer' or 'mention weekend hours'">
         <button id="regen-btn" class="btn btn-secondary" type="button">Regenerate</button>
       </div>
+
+      <label for="formspree-id">Contact form <span class="hint">(optional — a <a href="https://formspree.io" target="_blank" rel="noopener">Formspree</a> form ID makes the contact form deliver real messages)</span></label>
+      <input type="text" id="formspree-id" placeholder="e.g. mzbqwxyz">
       <div id="editor-status" class="status"></div>
     </section>
 

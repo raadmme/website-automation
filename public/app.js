@@ -4,10 +4,12 @@ const THEME_SWATCHES = {
   warm: "hsl(25 55% 35%)",
   forest: "hsl(150 40% 26%)",
   slate: "hsl(220 45% 32%)",
-  wine: "hsl(350 50% 32%)"
+  wine: "hsl(350 50% 32%)",
+  custom: "conic-gradient(hsl(0 60% 45%), hsl(90 60% 45%), hsl(180 60% 45%), hsl(270 60% 45%), hsl(0 60% 45%))"
 };
 
 let selectedTheme = "warm";
+let selectedHue = 25;
 let currentSiteId = null;
 let availableThemes = [];
 
@@ -27,9 +29,23 @@ function buildThemePicker(picker, current, onSelect) {
   }
 }
 
+function updateHueRow() {
+  $("#hue-row").hidden = selectedTheme !== "custom";
+  $("#hue-swatch").style.background = `hsl(${selectedHue} 50% 33%)`;
+}
+
 async function init() {
   availableThemes = await fetch("/api/themes").then((r) => r.json());
-  buildThemePicker($("#theme-picker"), selectedTheme, (theme) => { selectedTheme = theme; });
+  availableThemes.push("custom");
+  buildThemePicker($("#theme-picker"), selectedTheme, (theme) => {
+    selectedTheme = theme;
+    updateHueRow();
+  });
+  $("#hue").addEventListener("input", () => {
+    selectedHue = Number($("#hue").value);
+    updateHueRow();
+  });
+  updateHueRow();
   refreshGallery();
 }
 
@@ -44,7 +60,9 @@ $("#generate-form").addEventListener("submit", async (e) => {
   formData.append("theme", selectedTheme);
   for (const file of $("#documents").files) formData.append("documents", file);
   if ($("#logo").files[0]) formData.append("logo", $("#logo").files[0]);
+  for (const file of [...$("#photos").files].slice(0, 4)) formData.append("photos", file);
   formData.append("multiPage", $("#multi-page").checked ? "true" : "false");
+  if (selectedTheme === "custom") formData.append("hue", String(selectedHue));
 
   btn.disabled = true;
   status.textContent = "Generating your website… this can take up to a minute.";
@@ -74,10 +92,13 @@ function showResult(id) {
   $("#preview-frame").src = `/sites/${id}/?t=${Date.now()}`;
   buildThemePicker($("#result-theme-picker"), selectedTheme, async (theme) => {
     selectedTheme = theme;
+    updateHueRow();
+    const body = { theme };
+    if (theme === "custom") body.hue = selectedHue;
     const res = await fetch(`/api/sites/${id}/render`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ theme })
+      body: JSON.stringify(body)
     });
     if (res.ok) $("#preview-frame").src = `/sites/${id}/?t=${Date.now()}`;
   });
@@ -88,6 +109,7 @@ $("#edit-btn").addEventListener("click", async () => {
   if (!currentSiteId) return;
   const data = await fetch(`/api/sites/${currentSiteId}`).then((r) => r.json());
   $("#spec-editor").value = JSON.stringify(data.spec, null, 2);
+  $("#formspree-id").value = data.formspreeId ?? "";
   $("#editor").hidden = false;
   $("#editor").scrollIntoView({ behavior: "smooth" });
 });
@@ -103,10 +125,12 @@ $("#rerender-btn").addEventListener("click", async () => {
     status.classList.add("error");
     return;
   }
+  const body = { spec, theme: selectedTheme, formspreeId: $("#formspree-id").value.trim() };
+  if (selectedTheme === "custom") body.hue = selectedHue;
   const res = await fetch(`/api/sites/${currentSiteId}/render`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ spec, theme: selectedTheme })
+    body: JSON.stringify(body)
   });
   const data = await res.json();
   if (!res.ok) {

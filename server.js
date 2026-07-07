@@ -39,20 +39,39 @@ function rateLimit(max, windowMs) {
 }
 const generateLimiter = rateLimit(10, 60_000);
 
-const LOGO_EXTENSIONS = { "image/png": "png", "image/jpeg": "jpg", "image/svg+xml": "svg", "image/webp": "webp" };
+const IMAGE_EXTENSIONS = { "image/png": "png", "image/jpeg": "jpg", "image/svg+xml": "svg", "image/webp": "webp" };
 
-/** Generate a website from a description, optional documents, and an optional logo. */
-app.post("/api/generate", generateLimiter, upload.fields([{ name: "documents", maxCount: 5 }, { name: "logo", maxCount: 1 }]), async (req, res) => {
+/** Parse and validate a custom-theme hue; returns a number or null. */
+function parseHue(value) {
+  const hue = Number(value);
+  return Number.isFinite(hue) ? ((Math.round(hue) % 360) + 360) % 360 : null;
+}
+
+/** Generate a website from a description, optional documents, a logo, and photos. */
+app.post("/api/generate", generateLimiter, upload.fields([
+  { name: "documents", maxCount: 5 },
+  { name: "logo", maxCount: 1 },
+  { name: "photos", maxCount: 4 }
+]), async (req, res) => {
   try {
     const description = (req.body.description || "").trim();
     const theme = req.body.theme || "warm";
     const documents = req.files?.documents ?? [];
     const logoFile = req.files?.logo?.[0];
+    const photoFiles = req.files?.photos ?? [];
     if (!description && !documents.length) {
       return res.status(400).json({ error: "Provide a business description or at least one document." });
     }
-    if (logoFile && !LOGO_EXTENSIONS[logoFile.mimetype]) {
+    if (theme !== "custom" && !THEMES[theme]) {
+      return res.status(400).json({ error: `Unknown theme: ${theme}` });
+    }
+    if (logoFile && !IMAGE_EXTENSIONS[logoFile.mimetype]) {
       return res.status(400).json({ error: "Logo must be a PNG, JPEG, SVG, or WebP image." });
+    }
+    for (const photo of photoFiles) {
+      if (!IMAGE_EXTENSIONS[photo.mimetype]) {
+        return res.status(400).json({ error: `${photo.originalname}: photos must be PNG, JPEG, SVG, or WebP images.` });
+      }
     }
 
     const docTexts = [];
@@ -70,10 +89,23 @@ app.post("/api/generate", generateLimiter, upload.fields([{ name: "documents", m
     const id = randomUUID().slice(0, 8);
     const dir = path.join(GENERATED_DIR, id);
     const meta = { theme, multiPage: req.body.multiPage === "true" || req.body.multiPage === true };
+    if (theme === "custom") {
+      const hue = parseHue(req.body.hue);
+      if (hue === null) return res.status(400).json({ error: "Custom theme requires a numeric hue (0-359)." });
+      meta.hue = hue;
+    }
+    if (logoFile || photoFiles.length) await fs.mkdir(dir, { recursive: true });
     if (logoFile) {
-      meta.logo = `logo.${LOGO_EXTENSIONS[logoFile.mimetype]}`;
-      await fs.mkdir(dir, { recursive: true });
+      meta.logo = `logo.${IMAGE_EXTENSIONS[logoFile.mimetype]}`;
       await fs.writeFile(path.join(dir, meta.logo), logoFile.buffer);
+    }
+    if (photoFiles.length) {
+      meta.photos = [];
+      for (const [i, photo] of photoFiles.entries()) {
+        const name = `photo-${i + 1}.${IMAGE_EXTENSIONS[photo.mimetype]}`;
+        await fs.writeFile(path.join(dir, name), photo.buffer);
+        meta.photos.push(name);
+      }
     }
     await writeSiteFiles(dir, spec, meta);
     await updateIndex(GENERATED_DIR, id, {
@@ -92,14 +124,25 @@ app.post("/api/generate", generateLimiter, upload.fields([{ name: "documents", m
 app.post("/api/sites/:id/render", async (req, res) => {
   try {
     const dir = siteDir(req.params.id);
-    const { spec: bodySpec, theme, multiPage } = req.body;
+    const { spec: bodySpec, theme, hue, multiPage, formspreeId } = req.body;
     const spec = bodySpec ?? JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
     const meta = await readMeta(dir);
     if (theme) {
-      if (!THEMES[theme]) return res.status(400).json({ error: `Unknown theme: ${theme}` });
+      if (theme !== "custom" && !THEMES[theme]) return res.status(400).json({ error: `Unknown theme: ${theme}` });
       meta.theme = theme;
     }
+    if (meta.theme === "custom") {
+      const parsed = parseHue(hue ?? meta.hue);
+      if (parsed === null) return res.status(400).json({ error: "Custom theme requires a numeric hue (0-359)." });
+      meta.hue = parsed;
+    }
     if (multiPage !== undefined) meta.multiPage = Boolean(multiPage);
+    if (formspreeId !== undefined) {
+      if (formspreeId && !/^[a-zA-Z0-9]{1,32}$/.test(formspreeId)) {
+        return res.status(400).json({ error: "Formspree ID must be alphanumeric." });
+      }
+      meta.formspreeId = formspreeId || undefined;
+    }
 
     await writeSiteFiles(dir, spec, meta);
     await refreshIndexEntry(req.params.id, spec);
@@ -143,7 +186,16 @@ app.get("/api/sites/:id", async (req, res) => {
     const dir = siteDir(req.params.id);
     const spec = JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
     const meta = await readMeta(dir);
-    res.json({ id: req.params.id, spec, theme: meta.theme, logo: meta.logo ?? null, multiPage: Boolean(meta.multiPage) });
+    res.json({
+      id: req.params.id,
+      spec,
+      theme: meta.theme,
+      hue: meta.hue ?? null,
+      logo: meta.logo ?? null,
+      photos: meta.photos ?? [],
+      formspreeId: meta.formspreeId ?? null,
+      multiPage: Boolean(meta.multiPage)
+    });
   } catch {
     res.status(404).json({ error: "Site not found" });
   }
