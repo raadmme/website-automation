@@ -72,6 +72,8 @@ header.site {
 .form-card { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 3rem; }
 .form-card label { font-weight: 600; font-size: 0.95rem; margin-top: 0.5rem; }
 .hint { font-weight: 400; color: hsl(var(--muted-foreground)); font-size: 0.85rem; }
+.check-row { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.check-row input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: hsl(var(--primary)); }
 
 textarea, input[type="file"] {
   background: hsl(var(--background));

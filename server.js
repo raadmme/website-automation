@@ -69,7 +69,7 @@ app.post("/api/generate", generateLimiter, upload.fields([{ name: "documents", m
 
     const id = randomUUID().slice(0, 8);
     const dir = path.join(GENERATED_DIR, id);
-    const meta = { theme };
+    const meta = { theme, multiPage: req.body.multiPage === "true" || req.body.multiPage === true };
     if (logoFile) {
       meta.logo = `logo.${LOGO_EXTENSIONS[logoFile.mimetype]}`;
       await fs.mkdir(dir, { recursive: true });
@@ -92,13 +92,14 @@ app.post("/api/generate", generateLimiter, upload.fields([{ name: "documents", m
 app.post("/api/sites/:id/render", async (req, res) => {
   try {
     const dir = siteDir(req.params.id);
-    const { spec: bodySpec, theme } = req.body;
+    const { spec: bodySpec, theme, multiPage } = req.body;
     const spec = bodySpec ?? JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
     const meta = await readMeta(dir);
     if (theme) {
       if (!THEMES[theme]) return res.status(400).json({ error: `Unknown theme: ${theme}` });
       meta.theme = theme;
     }
+    if (multiPage !== undefined) meta.multiPage = Boolean(multiPage);
 
     await writeSiteFiles(dir, spec, meta);
     await refreshIndexEntry(req.params.id, spec);
@@ -142,7 +143,7 @@ app.get("/api/sites/:id", async (req, res) => {
     const dir = siteDir(req.params.id);
     const spec = JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
     const meta = await readMeta(dir);
-    res.json({ id: req.params.id, spec, theme: meta.theme, logo: meta.logo ?? null });
+    res.json({ id: req.params.id, spec, theme: meta.theme, logo: meta.logo ?? null, multiPage: Boolean(meta.multiPage) });
   } catch {
     res.status(404).json({ error: "Site not found" });
   }

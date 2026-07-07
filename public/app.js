@@ -44,6 +44,7 @@ $("#generate-form").addEventListener("submit", async (e) => {
   formData.append("theme", selectedTheme);
   for (const file of $("#documents").files) formData.append("documents", file);
   if ($("#logo").files[0]) formData.append("logo", $("#logo").files[0]);
+  formData.append("multiPage", $("#multi-page").checked ? "true" : "false");
 
   btn.disabled = true;
   status.textContent = "Generating your website… this can take up to a minute.";
