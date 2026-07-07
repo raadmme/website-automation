@@ -4,6 +4,9 @@
   "description": "Generate a polished small-business website from a short description or imported documents.",
   "type": "module",
   "main": "server.js",
+  "bin": {
+    "website-automation": "cli.js"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",

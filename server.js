@@ -6,7 +6,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateSiteSpec, regenerateSection, REGENERATABLE_SECTIONS } from "./lib/generator.js";
-import { renderSite, renderFavicon, renderRobots, renderSitemap, renderDeployGuide, THEMES } from "./lib/renderer.js";
+import { THEMES } from "./lib/renderer.js";
+import { writeSiteFiles, readMeta, exportFileList } from "./lib/site.js";
 import { extractText } from "./lib/importers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,17 +23,24 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024, files: 5 }
 });
 
-/** Generate a website from a description and optional uploaded documents. */
-app.post("/api/generate", upload.array("documents"), async (req, res) => {
+const LOGO_EXTENSIONS = { "image/png": "png", "image/jpeg": "jpg", "image/svg+xml": "svg", "image/webp": "webp" };
+
+/** Generate a website from a description, optional documents, and an optional logo. */
+app.post("/api/generate", upload.fields([{ name: "documents", maxCount: 5 }, { name: "logo", maxCount: 1 }]), async (req, res) => {
   try {
     const description = (req.body.description || "").trim();
     const theme = req.body.theme || "warm";
-    if (!description && !(req.files?.length)) {
+    const documents = req.files?.documents ?? [];
+    const logoFile = req.files?.logo?.[0];
+    if (!description && !documents.length) {
       return res.status(400).json({ error: "Provide a business description or at least one document." });
+    }
+    if (logoFile && !LOGO_EXTENSIONS[logoFile.mimetype]) {
+      return res.status(400).json({ error: "Logo must be a PNG, JPEG, SVG, or WebP image." });
     }
 
     const docTexts = [];
-    for (const file of req.files ?? []) {
+    for (const file of documents) {
       try {
         const text = await extractText(file.originalname, file.buffer);
         docTexts.push(`--- ${file.originalname} ---\n${text}`);
@@ -42,8 +50,17 @@ app.post("/api/generate", upload.array("documents"), async (req, res) => {
     }
 
     const { spec, mode } = await generateSiteSpec(description, docTexts.join("\n\n"));
-    const site = await saveSite(spec, theme);
-    res.json({ ...site, mode });
+
+    const id = randomUUID().slice(0, 8);
+    const dir = path.join(GENERATED_DIR, id);
+    const meta = { theme };
+    if (logoFile) {
+      meta.logo = `logo.${LOGO_EXTENSIONS[logoFile.mimetype]}`;
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, meta.logo), logoFile.buffer);
+    }
+    await writeSiteFiles(dir, spec, meta);
+    res.json({ id, previewUrl: `/sites/${id}/`, spec, mode });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Generation failed" });
@@ -54,11 +71,15 @@ app.post("/api/generate", upload.array("documents"), async (req, res) => {
 app.post("/api/sites/:id/render", async (req, res) => {
   try {
     const dir = siteDir(req.params.id);
-    const { spec: bodySpec, theme = "warm" } = req.body;
+    const { spec: bodySpec, theme } = req.body;
     const spec = bodySpec ?? JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
-    if (!THEMES[theme]) return res.status(400).json({ error: `Unknown theme: ${theme}` });
+    const meta = await readMeta(dir);
+    if (theme) {
+      if (!THEMES[theme]) return res.status(400).json({ error: `Unknown theme: ${theme}` });
+      meta.theme = theme;
+    }
 
-    await writeSiteFiles(dir, spec, theme);
+    await writeSiteFiles(dir, spec, meta);
     res.json({ id: req.params.id, previewUrl: `/sites/${req.params.id}/` });
   } catch (err) {
     res.status(err.code === "ENOENT" ? 404 : 500).json({ error: err.message });
@@ -74,13 +95,10 @@ app.post("/api/sites/:id/regenerate", async (req, res) => {
       return res.status(400).json({ error: `section must be one of: ${REGENERATABLE_SECTIONS.join(", ")}` });
     }
     const spec = JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
-    let theme = "warm";
-    try {
-      theme = JSON.parse(await fs.readFile(path.join(dir, "meta.json"), "utf-8")).theme;
-    } catch { /* default theme */ }
+    const meta = await readMeta(dir);
 
     spec[section] = await regenerateSection(spec, section, instructions);
-    await writeSiteFiles(dir, spec, theme);
+    await writeSiteFiles(dir, spec, meta);
     res.json({ id: req.params.id, spec, previewUrl: `/sites/${req.params.id}/` });
   } catch (err) {
     if (err.code === "ENOENT") return res.status(404).json({ error: "Site not found" });
@@ -119,11 +137,8 @@ app.get("/api/sites/:id", async (req, res) => {
   try {
     const dir = siteDir(req.params.id);
     const spec = JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
-    let theme = "warm";
-    try {
-      theme = JSON.parse(await fs.readFile(path.join(dir, "meta.json"), "utf-8")).theme;
-    } catch { /* default theme */ }
-    res.json({ id: req.params.id, spec, theme });
+    const meta = await readMeta(dir);
+    res.json({ id: req.params.id, spec, theme: meta.theme, logo: meta.logo ?? null });
   } catch {
     res.status(404).json({ error: "Site not found" });
   }
@@ -148,7 +163,8 @@ app.get("/api/sites/:id/download", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="website-${req.params.id}.zip"`);
     const archive = archiver("zip");
     archive.pipe(res);
-    for (const name of ["index.html", "favicon.svg", "robots.txt", "sitemap.xml", "DEPLOY.md"]) {
+    const meta = await readMeta(dir);
+    for (const name of exportFileList(meta)) {
       try {
         await fs.access(path.join(dir, name));
         archive.file(path.join(dir, name), { name });
@@ -165,24 +181,6 @@ app.use("/sites", express.static(GENERATED_DIR));
 
 /** Available themes. */
 app.get("/api/themes", (_req, res) => res.json(Object.keys(THEMES)));
-
-async function saveSite(spec, theme) {
-  const id = randomUUID().slice(0, 8);
-  const dir = path.join(GENERATED_DIR, id);
-  await fs.mkdir(dir, { recursive: true });
-  await writeSiteFiles(dir, spec, theme);
-  return { id, previewUrl: `/sites/${id}/`, spec };
-}
-
-async function writeSiteFiles(dir, spec, theme) {
-  await fs.writeFile(path.join(dir, "spec.json"), JSON.stringify(spec, null, 2));
-  await fs.writeFile(path.join(dir, "meta.json"), JSON.stringify({ theme }, null, 2));
-  await fs.writeFile(path.join(dir, "index.html"), renderSite(spec, { theme }));
-  await fs.writeFile(path.join(dir, "favicon.svg"), renderFavicon(spec, { theme }));
-  await fs.writeFile(path.join(dir, "robots.txt"), renderRobots());
-  await fs.writeFile(path.join(dir, "sitemap.xml"), renderSitemap());
-  await fs.writeFile(path.join(dir, "DEPLOY.md"), renderDeployGuide(spec));
-}
 
 function siteDir(id) {
   // prevent path traversal

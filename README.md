@@ -18,6 +18,13 @@ npm start
 
 Open http://localhost:3000.
 
+Or generate a site headlessly from the command line:
+
+```bash
+node cli.js "Hilltop Bakery is a family-run bakery in Asheville..." --theme warm --out ./site
+node cli.js --file brochure.pdf --file notes.txt --out ./site
+```
+
 Without an `ANTHROPIC_API_KEY` the app runs in **demo mode**: the full
 pipeline works (import → content → render → preview → download) but content
 is templated rather than AI-written.
@@ -43,7 +50,7 @@ instructions.
 
 | Method | Path                      | Description                          |
 |--------|---------------------------|--------------------------------------|
-| POST   | `/api/generate`           | multipart: `description`, `theme`, `documents[]` |
+| POST   | `/api/generate`           | multipart: `description`, `theme`, `documents[]`, `logo` |
 | GET    | `/api/sites`              | list generated sites                 |
 | GET    | `/api/sites/:id`          | fetch a site's editable spec         |
 | POST   | `/api/sites/:id/render`   | re-render with edited spec / theme   |

@@ -91,6 +91,12 @@ test("regenerateSection rejects unknown sections", async () => {
   assert.ok(REGENERATABLE_SECTIONS.includes("hero"));
 });
 
+test("renderSite includes logo image when provided", () => {
+  const html = renderSite(spec, { logo: "logo.png" });
+  assert.ok(html.includes('<img class="logo" src="logo.png"'));
+  assert.ok(!renderSite(spec).includes('<img class="logo"'));
+});
+
 test("extractText handles txt and rejects unknown types", async () => {
   const text = await extractText("notes.txt", Buffer.from("hello world"));
   assert.equal(text, "hello world");
