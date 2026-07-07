@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Website Automation — Clarity for the Long View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500;600&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="site">
+    <div>
+      <div class="brand">Website Automation</div>
+      <div class="brand-tag">Clarity for the long view</div>
+    </div>
+    <div id="mode-badge" class="mode-badge"></div>
+  </header>
+
+  <main>
+    <section class="intro">
+      <h1>A website for your business, in minutes</h1>
+      <p>Describe your business in a few sentences, or import documents you already have — a brochure, a business plan, notes. We turn them into a clean, professional website you can preview and download.</p>
+    </section>
+
+    <form id="generate-form" class="card form-card">
+      <label for="description">Describe your business</label>
+      <textarea id="description" name="description" rows="5"
+        placeholder="Example: Hilltop Bakery is a family-run bakery in Asheville, NC specializing in naturally leavened sourdough, seasonal pastries, and custom cakes. Open since 2012..."></textarea>
+
+      <label for="documents">Import documents <span class="hint">(optional — txt, md, csv, pdf, docx)</span></label>
+      <input type="file" id="documents" name="documents" multiple accept=".txt,.md,.csv,.pdf,.docx">
+
+      <label>Theme</label>
+      <div id="theme-picker" class="theme-picker"></div>
+
+      <button type="submit" class="btn" id="generate-btn">Generate Website</button>
+      <div id="status" class="status"></div>
+    </form>
+
+    <section id="result" class="result" hidden>
+      <h2>Your website is ready</h2>
+      <div class="result-actions">
+        <a id="preview-link" class="btn" target="_blank" rel="noopener">Open Preview</a>
+        <a id="download-link" class="btn btn-secondary">Download ZIP</a>
+        <button id="edit-btn" class="btn btn-secondary" type="button">Edit Content</button>
+      </div>
+      <iframe id="preview-frame" title="Website preview"></iframe>
+    </section>
+
+    <section id="editor" class="card form-card" hidden>
+      <h2>Edit content</h2>
+      <p class="hint">Adjust the generated content below, then re-render.</p>
+      <textarea id="spec-editor" rows="20" spellcheck="false"></textarea>
+      <button id="rerender-btn" class="btn" type="button">Re-render</button>
+      <div id="editor-status" class="status"></div>
+    </section>
+
+    <section class="gallery">
+      <h2>Previously generated</h2>
+      <div id="site-list" class="grid"></div>
+    </section>
+  </main>
+
+  <footer class="site">
+    Website Automation — generated sites follow a warm, professional design system.
+  </footer>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
