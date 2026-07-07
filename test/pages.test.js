@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderPages, renderSitemap, themeFromHue, resolveTheme, PAGE_FILES, THEMES } from "../lib/renderer.js";
-import { demoSpec, SITE_SPEC_SCHEMA } from "../lib/generator.js";
+import { demoSpec, reviseSpec, generateSiteSpec, SITE_SPEC_SCHEMA } from "../lib/generator.js";
 import { exportFileList } from "../lib/site.js";
 
 const spec = demoSpec("Hilltop Bakery is a family-run bakery in Asheville, NC.");
@@ -100,6 +100,22 @@ test("formspreeId switches the contact form to a POST form", () => {
 test("custom hue renders into the page palette", () => {
   const html = renderPages(spec, { theme: "custom", hue: 200 })["index.html"];
   assert.ok(html.includes("--primary: 200 50% 33%"));
+});
+
+test("reviseSpec requires an API key with a friendly 400", async (t) => {
+  const saved = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  t.after(() => { if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved; });
+  await assert.rejects(reviseSpec(spec, "make it warmer"), (err) => err.status === 400);
+});
+
+test("generateSiteSpec falls back to demo mode without an API key", async (t) => {
+  const saved = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  t.after(() => { if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved; });
+  const { spec: s, mode } = await generateSiteSpec("A tiny bookshop.", "", [{ mediaType: "image/png", data: "aGk=" }]);
+  assert.equal(mode, "demo");
+  assert.ok(s.businessName);
 });
 
 test("schema marks industry sections optional", () => {

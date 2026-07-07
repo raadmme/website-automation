@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateSiteSpec, regenerateSection, REGENERATABLE_SECTIONS } from "./lib/generator.js";
+import { generateSiteSpec, regenerateSection, reviseSpec, REGENERATABLE_SECTIONS } from "./lib/generator.js";
 import { THEMES } from "./lib/renderer.js";
 import { writeSiteFiles, readMeta, exportFileList, readIndex, updateIndex } from "./lib/site.js";
 import { extractText } from "./lib/importers.js";
@@ -74,8 +74,14 @@ app.post("/api/generate", generateLimiter, upload.fields([
       }
     }
 
+    const VISION_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
     const docTexts = [];
+    const images = [];
     for (const file of documents) {
+      if (VISION_TYPES.has(file.mimetype)) {
+        images.push({ mediaType: file.mimetype, data: file.buffer.toString("base64") });
+        continue;
+      }
       try {
         const text = await extractText(file.originalname, file.buffer);
         docTexts.push(`--- ${file.originalname} ---\n${text}`);
@@ -83,8 +89,7 @@ app.post("/api/generate", generateLimiter, upload.fields([
         return res.status(400).json({ error: `${file.originalname}: ${err.message}` });
       }
     }
-
-    const { spec, mode } = await generateSiteSpec(description, docTexts.join("\n\n"));
+    const { spec, mode } = await generateSiteSpec(description, docTexts.join("\n\n"), images);
 
     const id = randomUUID().slice(0, 8);
     const dir = path.join(GENERATED_DIR, id);
@@ -167,6 +172,26 @@ app.post("/api/sites/:id/regenerate", async (req, res) => {
     await writeSiteFiles(dir, spec, meta);
     await refreshIndexEntry(req.params.id, spec);
     res.json({ id: req.params.id, spec, previewUrl: `/sites/${req.params.id}/` });
+  } catch (err) {
+    if (err.code === "ENOENT") return res.status(404).json({ error: "Site not found" });
+    console.error(err);
+    res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
+/** Revise a whole site from a conversational instruction. */
+app.post("/api/sites/:id/revise", async (req, res) => {
+  try {
+    const dir = siteDir(req.params.id);
+    const message = (req.body.message || "").trim();
+    if (!message) return res.status(400).json({ error: "Provide a revision message." });
+    const spec = JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
+    const meta = await readMeta(dir);
+
+    const revised = await reviseSpec(spec, message);
+    await writeSiteFiles(dir, revised, meta);
+    await refreshIndexEntry(req.params.id, revised);
+    res.json({ id: req.params.id, spec: revised, previewUrl: `/sites/${req.params.id}/` });
   } catch (err) {
     if (err.code === "ENOENT") return res.status(404).json({ error: "Site not found" });
     console.error(err);

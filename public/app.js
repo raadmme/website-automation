@@ -171,6 +171,39 @@ $("#regen-btn").addEventListener("click", async () => {
   }
 });
 
+$("#revise-btn").addEventListener("click", async () => {
+  if (!currentSiteId) return;
+  const message = $("#revise-message").value.trim();
+  const status = $("#editor-status");
+  const btn = $("#revise-btn");
+  status.classList.remove("error");
+  if (!message) {
+    status.textContent = "Describe the change you would like.";
+    status.classList.add("error");
+    return;
+  }
+  status.textContent = "Revising the site…";
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/sites/${currentSiteId}/revise`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    $("#spec-editor").value = JSON.stringify(data.spec, null, 2);
+    $("#preview-frame").src = `/sites/${currentSiteId}/?t=${Date.now()}`;
+    $("#revise-message").value = "";
+    status.textContent = "Site revised.";
+  } catch (err) {
+    status.textContent = err.message;
+    status.classList.add("error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 async function refreshGallery() {
   const sites = await fetch("/api/sites").then((r) => r.json());
   const list = $("#site-list");
