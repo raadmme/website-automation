@@ -5,8 +5,8 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateSiteSpec } from "./lib/generator.js";
-import { renderSite, renderFavicon, renderRobots, renderSitemap, THEMES } from "./lib/renderer.js";
+import { generateSiteSpec, regenerateSection, REGENERATABLE_SECTIONS } from "./lib/generator.js";
+import { renderSite, renderFavicon, renderRobots, renderSitemap, renderDeployGuide, THEMES } from "./lib/renderer.js";
 import { extractText } from "./lib/importers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,6 +62,30 @@ app.post("/api/sites/:id/render", async (req, res) => {
     res.json({ id: req.params.id, previewUrl: `/sites/${req.params.id}/` });
   } catch (err) {
     res.status(err.code === "ENOENT" ? 404 : 500).json({ error: err.message });
+  }
+});
+
+/** Regenerate one section of a site's content with AI. */
+app.post("/api/sites/:id/regenerate", async (req, res) => {
+  try {
+    const dir = siteDir(req.params.id);
+    const { section, instructions = "" } = req.body;
+    if (!REGENERATABLE_SECTIONS.includes(section)) {
+      return res.status(400).json({ error: `section must be one of: ${REGENERATABLE_SECTIONS.join(", ")}` });
+    }
+    const spec = JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
+    let theme = "warm";
+    try {
+      theme = JSON.parse(await fs.readFile(path.join(dir, "meta.json"), "utf-8")).theme;
+    } catch { /* default theme */ }
+
+    spec[section] = await regenerateSection(spec, section, instructions);
+    await writeSiteFiles(dir, spec, theme);
+    res.json({ id: req.params.id, spec, previewUrl: `/sites/${req.params.id}/` });
+  } catch (err) {
+    if (err.code === "ENOENT") return res.status(404).json({ error: "Site not found" });
+    console.error(err);
+    res.status(err.status ?? 500).json({ error: err.message });
   }
 });
 
@@ -124,7 +148,7 @@ app.get("/api/sites/:id/download", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="website-${req.params.id}.zip"`);
     const archive = archiver("zip");
     archive.pipe(res);
-    for (const name of ["index.html", "favicon.svg", "robots.txt", "sitemap.xml"]) {
+    for (const name of ["index.html", "favicon.svg", "robots.txt", "sitemap.xml", "DEPLOY.md"]) {
       try {
         await fs.access(path.join(dir, name));
         archive.file(path.join(dir, name), { name });
@@ -157,6 +181,7 @@ async function writeSiteFiles(dir, spec, theme) {
   await fs.writeFile(path.join(dir, "favicon.svg"), renderFavicon(spec, { theme }));
   await fs.writeFile(path.join(dir, "robots.txt"), renderRobots());
   await fs.writeFile(path.join(dir, "sitemap.xml"), renderSitemap());
+  await fs.writeFile(path.join(dir, "DEPLOY.md"), renderDeployGuide(spec));
 }
 
 function siteDir(id) {

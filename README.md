@@ -32,7 +32,12 @@ is templated rather than AI-written.
 3. **Render** — the spec is rendered into a single self-contained
    `index.html` with the brand design system baked in (`lib/renderer.js`).
 4. **Preview & export** — preview in the browser, edit the content JSON and
-   re-render, switch color themes, or download the site as a ZIP.
+   re-render, switch color themes, regenerate individual sections with AI,
+   or download the site as a ZIP.
+
+Exported ZIPs include `index.html`, a themed SVG favicon, `robots.txt`,
+a `sitemap.xml` template, and a `DEPLOY.md` with GitHub Pages / Netlify
+instructions.
 
 ## API
 
@@ -42,6 +47,7 @@ is templated rather than AI-written.
 | GET    | `/api/sites`              | list generated sites                 |
 | GET    | `/api/sites/:id`          | fetch a site's editable spec         |
 | POST   | `/api/sites/:id/render`   | re-render with edited spec / theme   |
+| POST   | `/api/sites/:id/regenerate` | AI-rewrite one section (`section`, `instructions`) |
 | GET    | `/api/sites/:id/download` | download the site as a ZIP           |
 | DELETE | `/api/sites/:id`          | delete a generated site              |
 | GET    | `/api/themes`             | available color themes               |

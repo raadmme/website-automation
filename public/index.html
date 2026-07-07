@@ -59,6 +59,20 @@
       <p class="hint">Adjust the generated content below, then re-render.</p>
       <textarea id="spec-editor" rows="20" spellcheck="false"></textarea>
       <button id="rerender-btn" class="btn" type="button">Re-render</button>
+
+      <label>Regenerate a section with AI</label>
+      <div class="regen-row">
+        <select id="regen-section">
+          <option value="tagline">Tagline</option>
+          <option value="hero">Hero</option>
+          <option value="about">About</option>
+          <option value="services">Services</option>
+          <option value="testimonials">Testimonials</option>
+          <option value="faq">FAQ</option>
+        </select>
+        <input type="text" id="regen-instructions" placeholder="Optional instructions, e.g. 'make it warmer' or 'mention weekend hours'">
+        <button id="regen-btn" class="btn btn-secondary" type="button">Regenerate</button>
+      </div>
       <div id="editor-status" class="status"></div>
     </section>
 

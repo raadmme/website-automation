@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderSite, renderFavicon, renderRobots, renderSitemap, THEMES, esc } from "../lib/renderer.js";
-import { demoSpec } from "../lib/generator.js";
+import { demoSpec, regenerateSection, REGENERATABLE_SECTIONS } from "../lib/generator.js";
+import { renderDeployGuide } from "../lib/renderer.js";
 import { extractText } from "../lib/importers.js";
 
 const spec = demoSpec("Hilltop Bakery is a family-run bakery in Asheville, NC.");
@@ -76,6 +77,18 @@ test("contact form email cannot break out of the script tag", () => {
   const evil = { ...spec, contact: { ...spec.contact, email: '</script><script>alert(1)</script>' } };
   const html = renderSite(evil);
   assert.ok(!html.includes("</script><script>alert(1)"));
+});
+
+test("renderDeployGuide mentions the business and hosting options", () => {
+  const guide = renderDeployGuide(spec);
+  assert.ok(guide.includes(spec.businessName));
+  assert.ok(guide.includes("GitHub Pages"));
+  assert.ok(guide.includes("Netlify"));
+});
+
+test("regenerateSection rejects unknown sections", async () => {
+  await assert.rejects(() => regenerateSection(spec, "nonsense"), /Unknown section/);
+  assert.ok(REGENERATABLE_SECTIONS.includes("hero"));
 });
 
 test("extractText handles txt and rejects unknown types", async () => {

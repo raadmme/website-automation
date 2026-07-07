@@ -122,6 +122,19 @@ textarea:focus { outline: 2px solid hsl(var(--ring)); outline-offset: 1px; }
 .btn-secondary { background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); }
 .btn-danger { background: transparent; color: hsl(var(--destructive)); border: 1px solid hsl(var(--destructive) / 0.4); padding: 0.35rem 0.9rem; font-size: 0.8rem; }
 
+.regen-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+.regen-row select, .regen-row input[type="text"] {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--input));
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  color: hsl(var(--foreground));
+}
+.regen-row input[type="text"] { flex: 1; min-width: 14rem; }
+.regen-row .btn { margin-top: 0; }
+
 .status { font-size: 0.9rem; color: hsl(var(--muted-foreground)); min-height: 1.4em; }
 .status.error { color: hsl(var(--destructive)); }
 

@@ -116,6 +116,35 @@ $("#rerender-btn").addEventListener("click", async () => {
   $("#preview-frame").src = `/sites/${currentSiteId}/?t=${Date.now()}`;
 });
 
+$("#regen-btn").addEventListener("click", async () => {
+  if (!currentSiteId) return;
+  const status = $("#editor-status");
+  const btn = $("#regen-btn");
+  status.classList.remove("error");
+  status.textContent = "Regenerating section…";
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/sites/${currentSiteId}/regenerate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        section: $("#regen-section").value,
+        instructions: $("#regen-instructions").value
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    $("#spec-editor").value = JSON.stringify(data.spec, null, 2);
+    $("#preview-frame").src = `/sites/${currentSiteId}/?t=${Date.now()}`;
+    status.textContent = "Section regenerated.";
+  } catch (err) {
+    status.textContent = err.message;
+    status.classList.add("error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 async function refreshGallery() {
   const sites = await fetch("/api/sites").then((r) => r.json());
   const list = $("#site-list");
