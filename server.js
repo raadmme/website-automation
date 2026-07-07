@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateSiteSpec, regenerateSection, REGENERATABLE_SECTIONS } from "./lib/generator.js";
 import { THEMES } from "./lib/renderer.js";
-import { writeSiteFiles, readMeta, exportFileList } from "./lib/site.js";
+import { writeSiteFiles, readMeta, exportFileList, readIndex, updateIndex } from "./lib/site.js";
 import { extractText } from "./lib/importers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,13 +20,29 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024, files: 5 }
+  limits: { fileSize: 20 * 1024 * 1024, files: 10 }
 });
+
+/** Simple in-memory per-IP rate limiter. */
+function rateLimit(max, windowMs) {
+  const hits = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const recent = (hits.get(req.ip) ?? []).filter((t) => now - t < windowMs);
+    if (recent.length >= max) {
+      return res.status(429).json({ error: "Too many requests — please wait a minute and try again." });
+    }
+    recent.push(now);
+    hits.set(req.ip, recent);
+    next();
+  };
+}
+const generateLimiter = rateLimit(10, 60_000);
 
 const LOGO_EXTENSIONS = { "image/png": "png", "image/jpeg": "jpg", "image/svg+xml": "svg", "image/webp": "webp" };
 
 /** Generate a website from a description, optional documents, and an optional logo. */
-app.post("/api/generate", upload.fields([{ name: "documents", maxCount: 5 }, { name: "logo", maxCount: 1 }]), async (req, res) => {
+app.post("/api/generate", generateLimiter, upload.fields([{ name: "documents", maxCount: 5 }, { name: "logo", maxCount: 1 }]), async (req, res) => {
   try {
     const description = (req.body.description || "").trim();
     const theme = req.body.theme || "warm";
@@ -60,6 +76,11 @@ app.post("/api/generate", upload.fields([{ name: "documents", maxCount: 5 }, { n
       await fs.writeFile(path.join(dir, meta.logo), logoFile.buffer);
     }
     await writeSiteFiles(dir, spec, meta);
+    await updateIndex(GENERATED_DIR, id, {
+      businessName: spec.businessName,
+      tagline: spec.tagline,
+      createdAt: new Date().toISOString()
+    });
     res.json({ id, previewUrl: `/sites/${id}/`, spec, mode });
   } catch (err) {
     console.error(err);
@@ -80,6 +101,7 @@ app.post("/api/sites/:id/render", async (req, res) => {
     }
 
     await writeSiteFiles(dir, spec, meta);
+    await refreshIndexEntry(req.params.id, spec);
     res.json({ id: req.params.id, previewUrl: `/sites/${req.params.id}/` });
   } catch (err) {
     res.status(err.code === "ENOENT" ? 404 : 500).json({ error: err.message });
@@ -99,6 +121,7 @@ app.post("/api/sites/:id/regenerate", async (req, res) => {
 
     spec[section] = await regenerateSection(spec, section, instructions);
     await writeSiteFiles(dir, spec, meta);
+    await refreshIndexEntry(req.params.id, spec);
     res.json({ id: req.params.id, spec, previewUrl: `/sites/${req.params.id}/` });
   } catch (err) {
     if (err.code === "ENOENT") return res.status(404).json({ error: "Site not found" });
@@ -109,27 +132,8 @@ app.post("/api/sites/:id/regenerate", async (req, res) => {
 
 /** List generated sites. */
 app.get("/api/sites", async (_req, res) => {
-  const sites = [];
-  let entries = [];
-  try {
-    entries = await fs.readdir(GENERATED_DIR, { withFileTypes: true });
-  } catch { /* no generated dir yet */ }
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    try {
-      const spec = JSON.parse(await fs.readFile(path.join(GENERATED_DIR, entry.name, "spec.json"), "utf-8"));
-      const stat = await fs.stat(path.join(GENERATED_DIR, entry.name, "index.html"));
-      sites.push({
-        id: entry.name,
-        businessName: spec.businessName,
-        tagline: spec.tagline,
-        createdAt: stat.mtime,
-        previewUrl: `/sites/${entry.name}/`
-      });
-    } catch { /* skip malformed entries */ }
-  }
-  sites.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json(sites);
+  const index = await readIndex(GENERATED_DIR);
+  res.json(index.map((e) => ({ ...e, previewUrl: `/sites/${e.id}/` })));
 });
 
 /** Fetch a site's editable spec. */
@@ -148,6 +152,7 @@ app.get("/api/sites/:id", async (req, res) => {
 app.delete("/api/sites/:id", async (req, res) => {
   try {
     await fs.rm(siteDir(req.params.id), { recursive: true });
+    await updateIndex(GENERATED_DIR, req.params.id, null);
     res.json({ ok: true });
   } catch {
     res.status(404).json({ error: "Site not found" });
@@ -181,6 +186,16 @@ app.use("/sites", express.static(GENERATED_DIR));
 
 /** Available themes. */
 app.get("/api/themes", (_req, res) => res.json(Object.keys(THEMES)));
+
+async function refreshIndexEntry(id, spec) {
+  const index = await readIndex(GENERATED_DIR);
+  const existing = index.find((e) => e.id === id);
+  await updateIndex(GENERATED_DIR, id, {
+    businessName: spec.businessName,
+    tagline: spec.tagline,
+    createdAt: existing?.createdAt ?? new Date().toISOString()
+  });
+}
 
 function siteDir(id) {
   // prevent path traversal
