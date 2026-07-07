@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderSite, THEMES, esc } from "../lib/renderer.js";
+import { renderSite, renderFavicon, renderRobots, renderSitemap, THEMES, esc } from "../lib/renderer.js";
 import { demoSpec } from "../lib/generator.js";
 import { extractText } from "../lib/importers.js";
 
@@ -39,6 +39,30 @@ test("html is escaped", () => {
 
 test("esc escapes special characters", () => {
   assert.equal(esc(`<a href="x">&'`), "&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
+});
+
+test("rendered site includes SEO meta and favicon link", () => {
+  const html = renderSite(spec);
+  assert.ok(html.includes('property="og:title"'));
+  assert.ok(html.includes('name="twitter:card"'));
+  assert.ok(html.includes('href="favicon.svg"'));
+});
+
+test("renderFavicon produces a themed SVG monogram", () => {
+  const svg = renderFavicon(spec, { theme: "forest" });
+  assert.match(svg, /^<svg /);
+  assert.ok(svg.includes(`hsl(${THEMES.forest.primary})`));
+  assert.ok(svg.includes(">H</text>")); // Hilltop -> H
+});
+
+test("renderRobots and renderSitemap produce valid output", () => {
+  assert.match(renderRobots(), /User-agent: \*/);
+  assert.match(renderSitemap(), /<urlset/);
+});
+
+test("demoSpec uses document text when description is empty", () => {
+  const s = demoSpec("", "--- notes.txt ---\nRiver Bend Plumbing serves the whole valley.");
+  assert.equal(s.businessName, "River Bend Plumbing");
 });
 
 test("extractText handles txt and rejects unknown types", async () => {

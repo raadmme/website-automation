@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateSiteSpec } from "./lib/generator.js";
-import { renderSite, THEMES } from "./lib/renderer.js";
+import { renderSite, renderFavicon, renderRobots, renderSitemap, THEMES } from "./lib/renderer.js";
 import { extractText } from "./lib/importers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -58,9 +58,7 @@ app.post("/api/sites/:id/render", async (req, res) => {
     const spec = bodySpec ?? JSON.parse(await fs.readFile(path.join(dir, "spec.json"), "utf-8"));
     if (!THEMES[theme]) return res.status(400).json({ error: `Unknown theme: ${theme}` });
 
-    await fs.writeFile(path.join(dir, "spec.json"), JSON.stringify(spec, null, 2));
-    await fs.writeFile(path.join(dir, "meta.json"), JSON.stringify({ theme }, null, 2));
-    await fs.writeFile(path.join(dir, "index.html"), renderSite(spec, { theme }));
+    await writeSiteFiles(dir, spec, theme);
     res.json({ id: req.params.id, previewUrl: `/sites/${req.params.id}/` });
   } catch (err) {
     res.status(err.code === "ENOENT" ? 404 : 500).json({ error: err.message });
@@ -126,7 +124,12 @@ app.get("/api/sites/:id/download", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="website-${req.params.id}.zip"`);
     const archive = archiver("zip");
     archive.pipe(res);
-    archive.file(path.join(dir, "index.html"), { name: "index.html" });
+    for (const name of ["index.html", "favicon.svg", "robots.txt", "sitemap.xml"]) {
+      try {
+        await fs.access(path.join(dir, name));
+        archive.file(path.join(dir, name), { name });
+      } catch { /* older sites may lack extra assets */ }
+    }
     await archive.finalize();
   } catch {
     res.status(404).json({ error: "Site not found" });
@@ -143,10 +146,17 @@ async function saveSite(spec, theme) {
   const id = randomUUID().slice(0, 8);
   const dir = path.join(GENERATED_DIR, id);
   await fs.mkdir(dir, { recursive: true });
+  await writeSiteFiles(dir, spec, theme);
+  return { id, previewUrl: `/sites/${id}/`, spec };
+}
+
+async function writeSiteFiles(dir, spec, theme) {
   await fs.writeFile(path.join(dir, "spec.json"), JSON.stringify(spec, null, 2));
   await fs.writeFile(path.join(dir, "meta.json"), JSON.stringify({ theme }, null, 2));
   await fs.writeFile(path.join(dir, "index.html"), renderSite(spec, { theme }));
-  return { id, previewUrl: `/sites/${id}/`, spec };
+  await fs.writeFile(path.join(dir, "favicon.svg"), renderFavicon(spec, { theme }));
+  await fs.writeFile(path.join(dir, "robots.txt"), renderRobots());
+  await fs.writeFile(path.join(dir, "sitemap.xml"), renderSitemap());
 }
 
 function siteDir(id) {
