@@ -9,23 +9,27 @@ const THEME_SWATCHES = {
 
 let selectedTheme = "warm";
 let currentSiteId = null;
+let availableThemes = [];
 
-async function init() {
-  // theme picker
-  const themes = await fetch("/api/themes").then((r) => r.json());
-  const picker = $("#theme-picker");
-  for (const theme of themes) {
+function buildThemePicker(picker, current, onSelect) {
+  picker.innerHTML = "";
+  for (const theme of availableThemes) {
     const chip = document.createElement("button");
     chip.type = "button";
-    chip.className = "theme-chip" + (theme === selectedTheme ? " active" : "");
+    chip.className = "theme-chip" + (theme === current ? " active" : "");
     chip.dataset.theme = theme;
     chip.innerHTML = `<span class="swatch" style="background:${THEME_SWATCHES[theme] ?? "#888"}"></span>${theme}`;
     chip.addEventListener("click", () => {
-      selectedTheme = theme;
       picker.querySelectorAll(".theme-chip").forEach((c) => c.classList.toggle("active", c === chip));
+      onSelect(theme);
     });
     picker.appendChild(chip);
   }
+}
+
+async function init() {
+  availableThemes = await fetch("/api/themes").then((r) => r.json());
+  buildThemePicker($("#theme-picker"), selectedTheme, (theme) => { selectedTheme = theme; });
   refreshGallery();
 }
 
@@ -66,6 +70,15 @@ function showResult(id) {
   $("#preview-link").href = `/sites/${id}/`;
   $("#download-link").href = `/api/sites/${id}/download`;
   $("#preview-frame").src = `/sites/${id}/?t=${Date.now()}`;
+  buildThemePicker($("#result-theme-picker"), selectedTheme, async (theme) => {
+    selectedTheme = theme;
+    const res = await fetch(`/api/sites/${id}/render`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme })
+    });
+    if (res.ok) $("#preview-frame").src = `/sites/${id}/?t=${Date.now()}`;
+  });
   $("#result").scrollIntoView({ behavior: "smooth" });
 }
 

@@ -65,6 +65,19 @@ test("demoSpec uses document text when description is empty", () => {
   assert.equal(s.businessName, "River Bend Plumbing");
 });
 
+test("rendered site includes hero ornament and contact form", () => {
+  const html = renderSite(spec);
+  assert.ok(html.includes('class="ornament"'));
+  assert.ok(html.includes('id="contact-form"'));
+  assert.ok(html.includes("mailto:"));
+});
+
+test("contact form email cannot break out of the script tag", () => {
+  const evil = { ...spec, contact: { ...spec.contact, email: '</script><script>alert(1)</script>' } };
+  const html = renderSite(evil);
+  assert.ok(!html.includes("</script><script>alert(1)"));
+});
+
 test("extractText handles txt and rejects unknown types", async () => {
   const text = await extractText("notes.txt", Buffer.from("hello world"));
   assert.equal(text, "hello world");
