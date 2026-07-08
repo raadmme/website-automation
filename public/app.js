@@ -85,6 +85,9 @@ $("#generate-form").addEventListener("submit", async (e) => {
 
 function showResult(id) {
   currentSiteId = id;
+  inlineEditing = false;
+  $("#inline-edit-btn").textContent = "Edit in Preview";
+  $("#result-status").textContent = "";
   $("#result").hidden = false;
   $("#editor").hidden = true;
   $("#preview-link").href = `/sites/${id}/`;
@@ -163,6 +166,114 @@ $("#regen-btn").addEventListener("click", async () => {
     $("#spec-editor").value = JSON.stringify(data.spec, null, 2);
     $("#preview-frame").src = `/sites/${currentSiteId}/?t=${Date.now()}`;
     status.textContent = "Section regenerated.";
+  } catch (err) {
+    status.textContent = err.message;
+    status.classList.add("error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---- Inline visual editing (same-origin preview iframe) ---- */
+
+let inlineEditing = false;
+
+function getPath(obj, path) {
+  return path.split(".").reduce((o, k) => o?.[k], obj);
+}
+
+function setPath(obj, path, value) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  const target = keys.reduce((o, k) => o?.[k], obj);
+  if (target && typeof target === "object") target[last] = value;
+}
+
+$("#inline-edit-btn").addEventListener("click", async () => {
+  if (!currentSiteId) return;
+  const btn = $("#inline-edit-btn");
+  const status = $("#result-status");
+  status.classList.remove("error");
+  const doc = $("#preview-frame").contentDocument;
+  if (!doc) return;
+
+  if (!inlineEditing) {
+    // Replace decorated text with raw spec values so edits round-trip cleanly.
+    const data = await fetch(`/api/sites/${currentSiteId}`).then((r) => r.json());
+    for (const el of doc.querySelectorAll("[data-edit]")) {
+      const value = getPath(data.spec, el.dataset.edit);
+      if (typeof value !== "string") continue;
+      el.textContent = value;
+      if (el.dataset.multiline) el.style.whiteSpace = "pre-wrap";
+      el.contentEditable = "true";
+      el.style.outline = "1px dashed rgba(128, 96, 64, 0.6)";
+      el.style.outlineOffset = "3px";
+    }
+    inlineEditing = true;
+    btn.textContent = "Save Preview Edits";
+    status.textContent = "Click any outlined text in the preview to edit it, then save.";
+    return;
+  }
+
+  // Save: read edited values back into the spec and re-render.
+  btn.disabled = true;
+  status.textContent = "Saving…";
+  try {
+    const data = await fetch(`/api/sites/${currentSiteId}`).then((r) => r.json());
+    for (const el of doc.querySelectorAll("[data-edit][contenteditable]")) {
+      const raw = el.dataset.multiline
+        ? el.innerText.replace(/\n{2,}/g, "\n\n").trim()
+        : el.textContent.replace(/\s+/g, " ").trim();
+      if (typeof getPath(data.spec, el.dataset.edit) === "string") {
+        setPath(data.spec, el.dataset.edit, raw);
+      }
+    }
+    const res = await fetch(`/api/sites/${currentSiteId}/render`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spec: data.spec })
+    });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error);
+    inlineEditing = false;
+    btn.textContent = "Edit in Preview";
+    status.textContent = "Saved.";
+    $("#preview-frame").src = `/sites/${currentSiteId}/?t=${Date.now()}`;
+    if (!$("#editor").hidden) $("#spec-editor").value = JSON.stringify(data.spec, null, 2);
+  } catch (err) {
+    status.textContent = err.message;
+    status.classList.add("error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ---- Publish to GitHub Pages ---- */
+
+$("#publish-btn").addEventListener("click", async () => {
+  if (!currentSiteId) return;
+  const status = $("#result-status");
+  const btn = $("#publish-btn");
+  status.classList.remove("error");
+  const repo = prompt("Name for the GitHub repository (lowercase letters, digits, hyphens):", `site-${currentSiteId}`);
+  if (!repo) return;
+  btn.disabled = true;
+  status.textContent = "Publishing to GitHub Pages… this can take a minute.";
+  try {
+    const res = await fetch(`/api/sites/${currentSiteId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    status.innerHTML = "";
+    const link = document.createElement("a");
+    link.href = data.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = data.url;
+    status.append("Published: ", link, " (the page can take a few minutes to go live)");
   } catch (err) {
     status.textContent = err.message;
     status.classList.add("error");

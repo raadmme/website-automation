@@ -9,6 +9,7 @@ import { generateSiteSpec, regenerateSection, reviseSpec, REGENERATABLE_SECTIONS
 import { THEMES } from "./lib/renderer.js";
 import { writeSiteFiles, readMeta, exportFileList, readIndex, updateIndex } from "./lib/site.js";
 import { extractText } from "./lib/importers.js";
+import { publishSite } from "./lib/publish.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GENERATED_DIR = path.join(__dirname, "generated");
@@ -192,6 +193,20 @@ app.post("/api/sites/:id/revise", async (req, res) => {
     await writeSiteFiles(dir, revised, meta);
     await refreshIndexEntry(req.params.id, revised);
     res.json({ id: req.params.id, spec: revised, previewUrl: `/sites/${req.params.id}/` });
+  } catch (err) {
+    if (err.code === "ENOENT") return res.status(404).json({ error: "Site not found" });
+    console.error(err);
+    res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
+/** Publish a site to GitHub Pages via the gh CLI. */
+app.post("/api/sites/:id/publish", async (req, res) => {
+  try {
+    const dir = siteDir(req.params.id);
+    const repo = String(req.body.repo || "").trim();
+    const result = await publishSite(dir, repo);
+    res.json({ id: req.params.id, ...result });
   } catch (err) {
     if (err.code === "ENOENT") return res.status(404).json({ error: "Site not found" });
     console.error(err);

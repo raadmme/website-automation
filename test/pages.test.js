@@ -118,6 +118,15 @@ test("generateSiteSpec falls back to demo mode without an API key", async (t) =>
   assert.ok(s.businessName);
 });
 
+test("publishSite validates repository names before doing anything", async () => {
+  const { publishSite, REPO_NAME_RE } = await import("../lib/publish.js");
+  for (const bad of ["", "has space", "UPPER_case!", "-leading", "a".repeat(65), "evil/../repo"]) {
+    assert.ok(!REPO_NAME_RE.test(bad), `should reject "${bad}"`);
+    await assert.rejects(publishSite("/tmp/nowhere", bad), (err) => err.status === 400);
+  }
+  assert.ok(REPO_NAME_RE.test("site-abc123"));
+});
+
 test("schema marks industry sections optional", () => {
   for (const key of ["menu", "team", "serviceArea", "bookingUrl"]) {
     assert.ok(SITE_SPEC_SCHEMA.properties[key], `schema missing ${key}`);
