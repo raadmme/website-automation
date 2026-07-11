@@ -296,7 +296,11 @@ function siteDir(id) {
   return path.join(GENERATED_DIR, id);
 }
 
-app.listen(PORT, () => {
-  const mode = process.env.ANTHROPIC_API_KEY ? "Claude API" : "demo (set ANTHROPIC_API_KEY for AI generation)";
-  console.log(`website-automation running at http://localhost:${PORT} — mode: ${mode}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    const mode = process.env.ANTHROPIC_API_KEY ? "Claude API" : "demo (set ANTHROPIC_API_KEY for AI generation)";
+    console.log(`website-automation running at http://localhost:${PORT} — mode: ${mode}`);
+  });
+}
+
+export default app;
