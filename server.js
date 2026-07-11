@@ -12,7 +12,9 @@ import { extractText } from "./lib/importers.js";
 import { publishSite } from "./lib/publish.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const GENERATED_DIR = path.join(__dirname, "generated");
+const GENERATED_DIR = process.env.VERCEL
+  ? path.join("/tmp", "generated")
+  : path.join(__dirname, "generated");
 const PORT = process.env.PORT || 3000;
 
 const app = express();
